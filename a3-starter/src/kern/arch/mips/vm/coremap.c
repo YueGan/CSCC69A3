@@ -120,6 +120,8 @@ static volatile uint32_t ct_shootdowns_sent;
 static volatile uint32_t ct_shootdowns_done;
 static volatile uint32_t ct_shootdown_interrupts;
 
+/* Variable to keep track of last evicted page */
+static volatile int last_evicted_page;
 ////////////////////////////////////////////////////////////
 //
 // Per-CPU data
@@ -363,7 +365,25 @@ uint32_t
 page_replace(void)
 {
     // Complete this function.
-	return 0;
+    uint32_t pageEntry;
+
+	/* Give it a reasonal time frame */
+    uint32_t numTries = 20 * (int)num_coremap_entries;
+    while(numTries){
+
+    	/* Randomize the entry number */
+    	pageEntry = random() % num_coremap_entries;
+
+    	/* If its pinned and is non-kernel, then return the page number */
+    	if(coremap[pageEntry].cm_pinned == 0 && coremap[pageEntry].cm_kernel == 0){
+    		return pageEntry;
+    	}
+    	numTries--;
+    }
+    
+	/* Give it a reasonable time frame */
+	panic("Unable to find a pinned and non-kernel page with in time frame\n");
+	return -1;
 }
 
 #else /* not OPT_RANDPAGE */
@@ -380,7 +400,29 @@ uint32_t
 page_replace(void)
 {
 	// Complete this function.
-	return 0;
+
+	/* Get the page that was evicted last time */
+	int pageEntry = last_evicted_page;
+	
+
+	/* Give it a reasonal time frame */
+	uint32_t numTries = 20 * (int)num_coremap_entries;
+    while(numTries){
+		pageEntry++;
+    	/* Hash it with the previous evicted page */
+    	pageEntry = pageEntry % (int)num_coremap_entries;
+
+    	/* If its pinned and is non-kernel, then return the page number */
+    	if(coremap[pageEntry].cm_pinned == 0 && coremap[pageEntry].cm_kernel == 0){
+    		last_evicted_page = pageEntry;
+    		return pageEntry;
+    	}
+    	numTries--;
+    }
+
+    /* Give it a reasonable time frame */
+	panic("Unable to find a pinned and non-kernel page with in time frame\n");
+	return -1;
 }
 
 #endif /* OPT_RANDPAGE */

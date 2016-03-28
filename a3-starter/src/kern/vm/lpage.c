@@ -50,10 +50,12 @@ static volatile uint32_t ct_discard_evictions;
 static volatile uint32_t ct_write_evictions;
 static struct spinlock stats_spinlock = SPINLOCK_INITIALIZER;
 
-void
-vm_printstats(void)
+int
+vm_printstats(int nargs, char **args)
 {
 	uint32_t zf, mn, mj, de, we, te;
+	(void)nargs;
+	(void)args;
 
 	spinlock_acquire(&stats_spinlock);
 	zf = ct_zerofills;
@@ -70,6 +72,7 @@ vm_printstats(void)
 	kprintf("vm: %lu evictions (%lu discarding, %lu writes)\n",
 		(unsigned long) te, (unsigned long) de, (unsigned long) we);
 	vm_printmdstats();
+	return 0;
 }
 
 /*
@@ -419,23 +422,111 @@ lpage_zerofill(struct lpage **lpret)
 int
 lpage_fault(struct lpage *lp, struct addrspace *as, int faulttype, vaddr_t va)
 {
-	(void)lp;	// suppress compiler warning until code gets written
-	(void)as;	// suppress compiler warning until code gets written
-	(void)faulttype;// suppress compiler warning until code gets written
-	(void)va;	// suppress compiler warning until code gets written
-	return EUNIMP;	// suppress compiler warning until code gets written
+
+	/* Aquire the lock for this page */
+	lpage_lock_and_pin(lp);
+
+	/* New page to be put in physical address */
+	paddr_t newPA;
+	newPA = lp->lp_paddr & PAGE_FRAME;
+
+	/* If page is not in RAM, lp_paddr is INVALID_PADDR */
+	if(newPA == INVALID_PADDR){
+
+		lpage_unlock(lp);
+
+		/* Allocate space for this page in physical memory */
+		newPA = coremap_allocuser(lp);
+
+		if(newPA == INVALID_PADDR){
+
+			// Should add debug here
+			/* Return not enough memory */
+			return ENOMEM;
+		}
+
+		/* make sure that new page is pinned */
+		KASSERT(coremap_pageispinned(newPA));
+
+		/* Now lock the paging process */
+		lock_acquire(global_paging_lock);
+
+		/* Swap the page into Physical address */
+		swap_pagein(newPA, lp->lp_swapaddr);
+
+		lpage_lock(lp);
+
+		/* We can release global lock now since process is done */
+		lock_release(global_paging_lock);
+
+		/* Update the page to lpage */
+		lp->lp_paddr = newPA;
+	}
+
+	/* If read is attempted */
+	if(faulttype == VM_FAULT_READ){
+		lpage_unlock(lp);
+
+		// writable is 0
+		mmu_map(as, va, newPA, faulttype);
+	}
+	else if(faulttype == VM_FAULT_WRITE || faulttype == VM_FAULT_READONLY){
+		lpage_unlock(lp);
+
+		// Otherwise, page is dirty, and it is writable
+		LP_SET(lp, LPF_DIRTY);
+		mmu_map(as, va, newPA, faulttype);	
+	}
+	else{
+		panic("faulttype is not recognized!");
+	}
+
+	return 0;
 }
 
 /*
  * lpage_evict: Evict an lpage from physical memory.
+ * 
+ * Synchronization: lock the lpage while accessing it. We come here
+ * from the coremap and should have the global paging lock and should 
+ * have pinned the physical page (see coremap.c:do_evict()). 
+ * This is why we must not hold lpage locks while entering the coremap code.
  *
- * Synchronization: lock the lpage while evicting it. We come here
- * from the coremap and should have the coremap spinlock and should 
- * have pinned the physical page. This is why we must not hold lpage
- * locks while entering the coremap code.
+ * Similar to lpage_fault, the lpage lock should not be held while performing
+ * the page out (if one is needed).
  */
 void
 lpage_evict(struct lpage *lp)
 {
-	(void)lp;	// suppress compiler warning until code gets written
+
+	/* Make sure we have the process lock */
+	KASSERT(lock_do_i_hold(global_paging_lock));
+
+	/* Lock this page */
+	lpage_lock(lp);
+
+	/* Get the page that needs to be evicted */
+	paddr_t newPA;
+	newPA = lp->lp_paddr & PAGE_FRAME;
+
+	/* Error checking for the page */
+	KASSERT(newPA != INVALID_PADDR);
+
+	/* If the page is dirty, then we can copy it to swap */
+	if(LP_ISDIRTY(lp)){
+		/* Release the lock and begin swapping */
+		lpage_unlock(lp);
+
+		swap_pageout(newPA, lp->lp_swapaddr);
+		/* Clear its status */
+		LP_CLEAR(lp, LPF_DIRTY);
+		/* Relock. We need to set the address to INVALID_PADDR */
+		lpage_lock(lp);
+	}
+
+	lp->lp_paddr = INVALID_PADDR;
+
+	/* Unlock it when task is finished */
+	lpage_unlock(lp);
+
 }
