@@ -8,6 +8,8 @@
 #define _FILE_H_
 
 #include <kern/limits.h>
+#include <stat.h>
+#include <uio.h>
 
 struct vnode;
 
@@ -18,7 +20,19 @@ struct vnode;
  * array of ints is just intended to make the compiler happy.
  */
 struct filetable {
-	int changeme[__OPEN_MAX]; /* dummy type */
+	struct ft_entry *file_entry[__OPEN_MAX];
+};
+
+/* Struct for file table entry */
+struct ft_entry{
+
+	struct vnode *f_vnode;
+	const char *f_name;
+	struct lock *f_lock;
+	int f_flags;
+	off_t offset;
+	int numopen;
+	
 };
 
 /* these all have an implicit arg of the curthread's filetable */
@@ -35,6 +49,7 @@ int file_close(int fd);
  * the filetable to help implement some of the filetable-related
  * system calls.
  */
+int filetable_getfd(void);
 
 #endif /* _FILE_H_ */
 

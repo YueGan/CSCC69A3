@@ -11,6 +11,15 @@
 #include <kern/unistd.h>
 #include <file.h>
 #include <syscall.h>
+#include <vnode.h>
+#include <lib.h>
+#include <kern/fcntl.h>
+#include <thread.h>
+#include <vfs.h>
+#include <current.h>
+#include <synch.h>
+#include <kern/seek.h> 
+#include <uio.h> 
 
 /*** openfile functions ***/
 
@@ -26,11 +35,47 @@
 int
 file_open(char *filename, int flags, int mode, int *retfd)
 {
-	(void)filename;
-	(void)flags;
-	(void)retfd;
-	(void)mode;
+	int fileLocation;
+	struct vnode *retVnode;
+	struct stat *vnodeStat;
+	struct ft_entry *fte;
 
+	fte = kmalloc(sizeof(struct ft_entry));
+	if(fte  == NULL){
+		return ENOMEM;
+	}
+
+	int result = vfs_open(filename, flags, mode, &retVnode);
+
+	if(result){
+		kfree(fte);
+		return result;
+	}
+
+	fte->f_name = filename;
+	fte->offset = 0;
+	fte->f_flags = flags;
+	fte->f_vnode = retVnode;
+	fte->numopen = 1;
+	fte->f_lock = lock_create("File lock");
+	fileLocation = filetable_getfd();
+	if(fileLocation == -1){
+		lock_destroy(fte->f_lock);
+		kfree(fte);
+		vfs_close(retVnode);
+		return EMFILE;
+	}
+
+	if((flags & O_ACCMODE) == O_APPEND){
+		VOP_STAT(fte->f_vnode, vnodeStat);
+		fte->offset = vnodeStat->st_size;
+	}
+
+	curthread->t_filetable->file_entry[fileLocation] = fte;
+	*retfd = fileLocation;
+	return 0;
+
+	
 
 	return EUNIMP;
 }
@@ -94,5 +139,13 @@ filetable_destroy(struct filetable *ft)
  * the current file position) associated with that open file.
  */
 
+int filetable_getfd(void){
+	for (int i = 0; i < __OPEN_MAX; i++){
+		if (curthread->t_filetable->file_entry[i] == NULL){
+			return i;
+		}
+	}
+	return -1;
+}
 
 /* END A3 SETUP */
