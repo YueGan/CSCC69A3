@@ -174,14 +174,24 @@ sys_read(int fd, userptr_t buf, size_t size, int *retval)
 	  return EBADF;
 	}
 
+	if (curthread->t_filetable->file_entry[fd] == NULL){
+		return EBADF;
+	}
+
+	// aquire the lock for this page entry
+	lock_acquire(curthread->t_filetable->file_entry[fd]->f_lock);
 	/* set up a uio with the buffer, its size, and the current offset */
 	mk_useruio(&user_iov, &user_uio, buf, size, offset, UIO_READ);
+
 
 	/* does the read */
 	result = VOP_READ(cons_vnode, &user_uio);
 	if (result) {
 		return result;
 	}
+
+	curthread->t_filetable->file_entry[fd]->offset = user_uio.uio_offset;
+	lock_release(curthread->t_filetable->file_entry[fd]->f_lock);
 
 	/*
 	 * The amount read is the size of the buffer originally, minus
@@ -231,6 +241,12 @@ sys_write(int fd, userptr_t buf, size_t len, int *retval)
           return EBADF;
         }
 
+        if (curthread->t_filetable->file_entry[fd] == NULL){
+        	return EBADF;
+        }
+
+
+        lock_acquire(curthread->t_filetable->file_entry[fd]->f_lock);
         /* set up a uio with the buffer, its size, and the current offset */
         mk_useruio(&user_iov, &user_uio, buf, len, offset, UIO_WRITE);
 
@@ -240,6 +256,8 @@ sys_write(int fd, userptr_t buf, size_t len, int *retval)
                 return result;
         }
 
+        curthread->t_filetable->file_entry[fd]->offset = user_uio.uio_offset;
+        lock_release(curthread->t_filetable->file_entry[fd]->f_lock);
         /*
          * the amount written is the size of the buffer originally,
          * minus how much is left in it.
