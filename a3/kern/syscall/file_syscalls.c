@@ -372,28 +372,78 @@ sys___getcwd(userptr_t buf, size_t buflen, int *retval)
 
 /*
  * sys_fstat
+ Grab information on fd descriptor and store to statptr
  */
 int
 sys_fstat(int fd, userptr_t statptr)
 {
-        (void)fd;
-        (void)statptr;
+	//stat structure, uio for userspace movement and its iovec. result for errors
+	//filetable and filetable entry to look up files
+	int result;
+	struct stat stats;
+	struct uio u;
+	struct iovec iov;
+	struct filetable *ft = curthread->t_filetable;
+	struct ft_entry *fe = ft->file_entry[fd];
 
-	return EUNIMP;
+	//EBADF if fd is invalid. Check if in range and not null and has vnode
+	if (fd < 0 || fd >= __OPEN_MAX || fe == NULL || fe->f_vnode == NULL)
+		return EBADF;
+
+	//EFAULT if statptr isn't a valid address
+	if (statptr == NULL)
+		return EFAULT;
+
+	//parameters valid, grab stats
+	result = VOP_STAT(fe->f_vnode, &stats);
+	if (result) 
+		return result;
+
+	//setup userspace movement and move to statptr
+	mk_useruio(&iov, &u, statptr, sizeof(stats), 0 , UIO_READ);
+	result = uiomove(&stats, sizeof(stats), &u);
+	return result;
 }
 
 /*
  * sys_getdirentry
+ read the filename from a directory
  */
 int
 sys_getdirentry(int fd, userptr_t buf, size_t buflen, int *retval)
-{
-        (void)fd;
-        (void)buf;
-	(void)buflen;
-        (void)retval;
 
-	return EUNIMP;
+	//uio and its iovec for userspace, result for errors
+	//filetable and filetable entry to look up file
+{
+	int result;
+	struct uio u;
+	struct iovec iov;
+	struct filetable *ft = curthread->t_filetable;
+	struct ft_entry *fe = ft->file_entry[fd];
+	//EBADF if fd invalid. check if in range and has vnode
+	if (fd < 0 || fd >= __OPEN_MAX || fe == NULL || fe->f_vnode == NULL)
+		return EBADF;
+	//EFAULT if buf invalid
+	if (buf == NULL)
+		return EFAULT;
+
+	//setup userspace for vnode offset by file entry's offset, use vop
+	mk_useruio(&iov, &u, buf, buflen, fe->offset, UIO_READ);
+	result = VOP_GETDIRENTRY(fe->f_vnode, &u);
+
+	//if failed, set retval to -1 otherwise return length of transferred handle
+	if (result){
+		*retval = -1;
+		return result;
+	}
+
+	//subtract from residual field in uio struct to determine actual copied length. resid=0 if all copied
+	*retval = buflen - u.uio_resid;
+
+	//update offset
+	fe->offset = u.uio_offset;
+
+	return 0;
 }
 
 /* END A3 SETUP */
