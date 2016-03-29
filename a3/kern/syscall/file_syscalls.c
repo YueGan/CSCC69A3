@@ -22,6 +22,7 @@
 #include <copyinout.h>
 #include <synch.h>
 #include <file.h>
+#include <kern/seek.h>
 
 /* This special-case global variable for the console vnode should be deleted 
  * when you have a proper open file table implementation.
@@ -274,12 +275,49 @@ sys_write(int fd, userptr_t buf, size_t len, int *retval)
 int
 sys_lseek(int fd, off_t offset, int whence, off_t *retval)
 {
-        (void)fd;
-        (void)offset;
-        (void)whence;
-        (void)retval;
+	
+	struct filetable *ft = curthread->t_filetable;
+	struct ft_entry *fe = ft->file_entry[fd];
+	lock_acquire(fe->f_lock);
 
-	return EUNIMP;
+	if (fd < 0 || fd >=__OPEN_MAX ||ft->file_entry[fd] == NULL ||
+			ft->file_entry[fd]->f_vnode == NULL){
+		lock_release(fe->f_lock);
+	  	return EBADF;
+	}
+
+    int position;
+    if(whence == SEEK_SET){
+    	position = (int)offset;
+  	}else if(whence == SEEK_CUR){
+    	position = (int)fe->offset + (int)offset;
+  	}else if(whence == SEEK_END){
+  		struct stat ft_stat;
+  		VOP_STAT(fe->f_vnode, &ft_stat);
+     	position = (int)ft_stat.st_size - (int)offset;
+
+  	}else{
+  		lock_release(fe->f_lock);
+  		return EINVAL;
+  	}
+
+
+  	if (position < 0){
+    	lock_release(fe->f_lock);
+    	return EINVAL;
+  	}
+
+	int result = VOP_TRYSEEK(fe->f_vnode, position);
+
+  	if (result != 0){
+    	lock_release(fe->f_lock);
+    	return ESPIPE;
+  	}
+
+  	fe->offset=(off_t)position;
+  	lock_release(fe->f_lock);
+  	*retval = fe->offset;
+  	return 0;
 }
 
 
