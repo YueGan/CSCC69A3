@@ -174,7 +174,7 @@ sys_read(int fd, userptr_t buf, size_t size, int *retval)
 	/* Right now, only stdin (0), stdout (1) and stderr (2)
 	 * are supported, and they can't be redirected to a file
 	 */
-	if (fd < 0 || fd > 2) {
+	if (fd < 0 || fd > __OPEN_MAX -1) {
 	  return EBADF;
 	}
 
