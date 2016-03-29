@@ -190,7 +190,7 @@ sys_read(int fd, userptr_t buf, size_t size, int *retval)
 	if (result) {
 		return result;
 	}
-
+	// Change the default offset to file table entry offset
 	curthread->t_filetable->file_entry[fd]->offset = user_uio.uio_offset;
 	lock_release(curthread->t_filetable->file_entry[fd]->f_lock);
 
@@ -257,6 +257,7 @@ sys_write(int fd, userptr_t buf, size_t len, int *retval)
                 return result;
         }
 
+        // Change the default offset to file table entry offset
         curthread->t_filetable->file_entry[fd]->offset = user_uio.uio_offset;
         lock_release(curthread->t_filetable->file_entry[fd]->f_lock);
         /*
