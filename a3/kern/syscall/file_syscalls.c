@@ -132,8 +132,6 @@ sys_dup2(int oldfd, int newfd, int *retval)
 		return result;		
 	}
 
-	// Upon completion, set the return value to newfd
-	*retval = newfd;
 	return 0;
 }
 
