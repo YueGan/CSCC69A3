@@ -90,9 +90,42 @@ file_open(char *filename, int flags, int mode, int *retfd)
 int
 file_close(int fd)
 {
-        (void)fd;
 
-	return EUNIMP;
+	// If the file descripter given is error or greater than number of open_max
+	// return bad file number
+	if (fd < 0 || fd >= __OPEN_MAX){
+		return EBADF;
+	}
+	struct ft_entry *fte;
+
+	fte = curthread->t_filetable->file_entry[fd];
+
+	// If given fd is not in the file entry, then return no such directory error
+	if(fte == NULL){
+		return ENOENT;
+	}
+
+	// Aquire the page lock
+	lock_acquire(fte->f_lock);
+	// Decrement the number of opened file, and set current file entry to Null
+	fte->numopen--;
+	curthread->t_filetable->file_entry[fd] = NULL;	
+
+	// If the file number opened is 0 then free what ever is required
+	// And destroy the lock so that next file table entry can aquire the lock
+	if(fte->numopen == 0){
+		lock_release(fte->f_lock);
+		lock_destroy(fte->f_lock);
+		vfs_close(fte->f_vnode);
+		kfree(fte);
+	}
+	// Else, simply release the lock
+	else{
+		lock_release(fte->f_lock);
+	}
+
+	// Return 0 on success
+	return 0;
 }
 
 /*** filetable functions ***/
@@ -115,6 +148,40 @@ file_close(int fd)
 int
 filetable_init(void)
 {
+
+	int result;
+	int *retval;
+	char cons[4];
+
+	curthread->t_filetable = kmalloc(sizeof(struct filetable));
+
+	// If we cannot malloc a space for filetable, then return not enough 
+	// memory
+	if (curthread->t_filetable == NULL){
+		return ENOMEM;
+	}
+
+	// Initialize the file entry
+	for (int i = 0; i < __OPEN_MAX; i++){
+		curthread->t_filetable->file_entry[i] = NULL;
+	}
+
+	strcpy(cons, "con:");
+	result = file_open(cons, O_RDONLY, 0064, retval);
+
+	if(result){
+		return result;
+	}
+
+	strcpy(cons, "con:");
+
+	result = file_open(cons, O_WRONLY, 0664, retval);
+
+
+	if(result){
+		return result;
+	}
+
 	return 0;
 }	
 
