@@ -50,6 +50,7 @@
 #include <version.h>
 #include <pid.h> /* to bootstrap process ID system - New for ASST2 */
 #include "autoconf.h"  // for pseudoconfig
+#include <file.h>
 
 
 /*
@@ -111,6 +112,7 @@ boot(void)
 	thread_bootstrap();
 	hardclock_bootstrap();
 	vfs_bootstrap();
+	
 
 	/* Probe and initialize devices. Interrupts should come on. */
 	kprintf("Device probe...\n");
@@ -135,7 +137,7 @@ boot(void)
 	 * come before additional cpus are brought online.
 	 */
 	pid_bootstrap(); 
-	dumb_consoleIO_bootstrap(); /* And initialize for user console IO */
+	filetable_init(); /* And initialize for user console IO */
 
 	thread_start_cpus();
 

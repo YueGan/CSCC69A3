@@ -35,6 +35,8 @@
 int
 file_open(char *filename, int flags, int mode, int *retfd)
 {
+
+	//kprintf("FILE_OPEN@@@@@@@@@@@@@@@@@@\n");
 	int fileLocation;
 	struct vnode *retVnode;
 	struct stat *vnodeStat;
@@ -44,7 +46,8 @@ file_open(char *filename, int flags, int mode, int *retfd)
 	if(fte  == NULL){
 		return ENOMEM;
 	}
-
+	
+	//kprintf("FILE_OPEN@@@@@@@@@@@@@@@@@@ 50\n");
 	int result = vfs_open(filename, flags, mode, &retVnode);
 
 	if(result){
@@ -52,6 +55,7 @@ file_open(char *filename, int flags, int mode, int *retfd)
 		return result;
 	}
 
+	//kprintf("FILE_OPEN@@@@@@@@@@@@@@@@@@ 58\n");
 	fte->f_name = filename;
 	fte->offset = 0;
 	fte->f_flags = flags;
@@ -59,6 +63,8 @@ file_open(char *filename, int flags, int mode, int *retfd)
 	fte->numopen = 1;
 	fte->f_lock = lock_create("File lock");
 	fileLocation = filetable_getfd();
+
+	//kprintf("FILE_OPEN@@@@@@@@@@@@@@@@@@ 67\n");
 	if(fileLocation == -1){
 		lock_destroy(fte->f_lock);
 		kfree(fte);
@@ -66,18 +72,16 @@ file_open(char *filename, int flags, int mode, int *retfd)
 		return EMFILE;
 	}
 
+	//kprintf("FILE_OPEN@@@@@@@@@@@@@@@@@@ 75\n");
 	if((flags & O_ACCMODE) == O_APPEND){
 		VOP_STAT(fte->f_vnode, vnodeStat);
 		fte->offset = vnodeStat->st_size;
 	}
 
+	//kprintf("FILE_OPEN@@@@@@@@@@@@@@@@@@ 81\n");
 	curthread->t_filetable->file_entry[fileLocation] = fte;
 	*retfd = fileLocation;
 	return 0;
-
-	
-
-	return EUNIMP;
 }
 
 
@@ -90,7 +94,7 @@ file_open(char *filename, int flags, int mode, int *retfd)
 int
 file_close(int fd)
 {
-
+	//kprintf("FILE_CLOSE@@@@@@@@@@@@@@@@@@\n");
 	// If the file descripter given is error or greater than number of open_max
 	// return bad file number
 	if (fd < 0 || fd >= __OPEN_MAX){
@@ -149,6 +153,7 @@ int
 filetable_init(void)
 {
 
+	//kprintf("FILE_INIT @@@@@@@@@@@@@@@@@@\n");
 	int result;
 	int *retval;
 	char cons[4];
@@ -167,7 +172,7 @@ filetable_init(void)
 	}
 
 	strcpy(cons, "con:");
-	result = file_open(cons, O_RDONLY, 0064, retval);
+	result = file_open(cons, O_RDONLY, 0664, retval);
 
 	if(result){
 		return result;
@@ -194,6 +199,8 @@ filetable_init(void)
 void
 filetable_destroy(struct filetable *ft)
 {
+
+	//kprintf("FILE_DESTROY @@@@@@@@@@@@@@@@@@\n");
         for(int i = 0; i < __OPEN_MAX; i++){
         	if(ft->file_entry[i] != NULL){
         		file_close(i);

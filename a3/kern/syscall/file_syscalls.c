@@ -157,10 +157,12 @@ sys_dup2(int oldfd, int newfd, int *retval)
 int
 sys_read(int fd, userptr_t buf, size_t size, int *retval)
 {
+
+	kprintf("SYS_READ@@@@@@@@@@@@@@@@@@@@@2\n");
 	struct uio user_uio;
 	struct iovec user_iov;
 	int result;
-	int offset = 0;
+	//int offset = 0;
 
 	/* Make sure we were able to init the cons_vnode */
 	if (cons_vnode == NULL) {
@@ -182,12 +184,13 @@ sys_read(int fd, userptr_t buf, size_t size, int *retval)
 	// aquire the lock for this page entry
 	lock_acquire(curthread->t_filetable->file_entry[fd]->f_lock);
 	/* set up a uio with the buffer, its size, and the current offset */
-	mk_useruio(&user_iov, &user_uio, buf, size, offset, UIO_READ);
+	mk_useruio(&user_iov, &user_uio, buf, size, curthread->t_filetable->file_entry[fd]->offset, UIO_READ);
 
 
 	/* does the read */
-	result = VOP_READ(cons_vnode, &user_uio);
+	result = VOP_READ(curthread->t_filetable->file_entry[fd]->f_vnode, &user_uio);
 	if (result) {
+		lock_release(curthread->t_filetable->file_entry[fd]->f_lock);
 		return result;
 	}
 	// Change the default offset to file table entry offset
@@ -228,7 +231,7 @@ sys_write(int fd, userptr_t buf, size_t len, int *retval)
         struct uio user_uio;
         struct iovec user_iov;
         int result;
-        int offset = 0;
+        //int offset = 0;
 
         /* Make sure we were able to init the cons_vnode */
         if (cons_vnode == NULL) {
@@ -249,12 +252,13 @@ sys_write(int fd, userptr_t buf, size_t len, int *retval)
 
         lock_acquire(curthread->t_filetable->file_entry[fd]->f_lock);
         /* set up a uio with the buffer, its size, and the current offset */
-        mk_useruio(&user_iov, &user_uio, buf, len, offset, UIO_WRITE);
+        mk_useruio(&user_iov, &user_uio, buf, len, curthread->t_filetable->file_entry[fd]->offset, UIO_WRITE);
 
         /* does the write */
-        result = VOP_WRITE(cons_vnode, &user_uio);
+        result = VOP_WRITE(curthread->t_filetable->file_entry[fd]->f_vnode, &user_uio);
         if (result) {
-                return result;
+        	lock_release(curthread->t_filetable->file_entry[fd]->f_lock);
+            return result;
         }
 
         // Change the default offset to file table entry offset
