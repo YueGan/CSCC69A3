@@ -274,9 +274,25 @@ sys_lseek(int fd, off_t offset, int whence, off_t *retval)
 int
 sys_chdir(userptr_t path)
 {
-        (void)path;
-
-	return EUNIMP;
+	char *p;
+	int result;
+	// kernel malloc for input path
+	if ((p = (char *)kmalloc(__PATH_MAX)) == NULL) {
+		return ENOMEM;
+	}
+	// copy the path
+	result = copyinstr(path, p, __PATH_MAX, NULL);
+	// error checking, return error code when returning none 0 result
+	if (result != 0) {
+		kfree(p);
+		// return error Code
+		return result;
+	}else{
+		// call chdir in vfs
+		result = vfs_chdir(p);
+		kfree(p);
+		return result;
+	}
 }
 
 /*
@@ -286,11 +302,15 @@ sys_chdir(userptr_t path)
 int
 sys___getcwd(userptr_t buf, size_t buflen, int *retval)
 {
-        (void)buf;
-        (void)buflen;
-        (void)retval;
-
-	return EUNIMP;
+	// change from getting address to passing pointers
+    struct uio *user_uio;
+	struct iovec *user_iov;
+	int result;
+	/* set up a uio with the buffer, its size, and the current offset */
+	mk_useruio(user_iov, user_uio, buf, buflen, 0, UIO_READ);
+	result = vfs_getcwd(user_uio);
+	*retval = result;
+	return result;
 }
 
 /*
