@@ -122,11 +122,19 @@ sys_close(int fd)
 int
 sys_dup2(int oldfd, int newfd, int *retval)
 {
-        (void)oldfd;
-        (void)newfd;
-        (void)retval;
 
-	return EUNIMP;
+	int result;
+	result = file_dup(oldfd, newfd, retval);
+
+	
+	if (result){
+		
+		return result;		
+	}
+
+	// Upon completion, set the return value to newfd
+	*retval = newfd;
+	return 0;
 }
 
 /*

@@ -194,7 +194,12 @@ filetable_init(void)
 void
 filetable_destroy(struct filetable *ft)
 {
-        (void)ft;
+        for(int i = 0; i < __OPEN_MAX; i++){
+        	if(ft->file_entry[i] != NULL){
+        		file_close(i);
+        	}
+        }
+        kfree(ft);
 }	
 
 
@@ -215,4 +220,43 @@ int filetable_getfd(void){
 	return -1;
 }
 
+int file_dup(int oldfd, int newfd, int *retval){
+	
+	struct filetable *file_table = curthread->t_filetable;
+
+
+	// Return error message bad fd number if the fds are out of bound
+	if (newfd < 0 || oldfd < 0 || newfd >= __OPEN_MAX || oldfd >= __OPEN_MAX){
+		return EBADF;
+	}
+
+	// If the fds are the same, there are nothing to change.
+	if(oldfd == newfd){
+		// Upon completion, set the return value to newfd
+		*retval = newfd;
+		return 0;
+	}
+	
+	// There are nothing to duplicate!
+	if(file_table->file_entry[oldfd] == NULL){
+		return EBADF;
+	}
+
+	// Close the file entry of new if its not empty to use
+	if(file_table->file_entry[newfd] != NULL){
+		file_close(newfd);
+	}
+
+	lock_acquire(file_table->file_entry[oldfd]->f_lock);
+	file_table->file_entry[oldfd]->numopen++;
+	// Perform duplication
+	file_table->file_entry[newfd] = file_table->file_entry[oldfd];
+	lock_release(file_table->file_entry[oldfd]->f_lock);
+
+	// Upon completion, set the return value to newfd
+	*retval = newfd;
+
+
+	return 0;
+}
 /* END A3 SETUP */

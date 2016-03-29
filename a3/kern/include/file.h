@@ -50,6 +50,7 @@ int file_close(int fd);
  * system calls.
  */
 int filetable_getfd(void);
+int file_dup(int oldfd, int newfd, int *retval);
 
 #endif /* _FILE_H_ */
 
