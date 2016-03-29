@@ -158,17 +158,18 @@ int
 sys_read(int fd, userptr_t buf, size_t size, int *retval)
 {
 
-	kprintf("SYS_READ@@@@@@@@@@@@@@@@@@@@@2\n");
+	//kprintf("SYS_READ@@@@@@@@@@@@@@@@@@@@@2\n");
 	struct uio user_uio;
 	struct iovec user_iov;
 	int result;
 	//int offset = 0;
 
 	/* Make sure we were able to init the cons_vnode */
+	/*
 	if (cons_vnode == NULL) {
 	  return ENODEV;
 	}
-
+	*/
 	/* better be a valid file descriptor */
 	/* Right now, only stdin (0), stdout (1) and stderr (2)
 	 * are supported, and they can't be redirected to a file
@@ -233,10 +234,11 @@ sys_write(int fd, userptr_t buf, size_t len, int *retval)
         int result;
         //int offset = 0;
 
-        /* Make sure we were able to init the cons_vnode */
+        /* Make sure we were able to init the cons_vnode 
         if (cons_vnode == NULL) {
           return ENODEV;
         }
+        */
 
         /* Right now, only stdin (0), stdout (1) and stderr (2)
          * are supported, and they can't be redirected to a file

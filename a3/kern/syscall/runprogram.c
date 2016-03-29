@@ -44,7 +44,7 @@
 #include <vfs.h>
 #include <syscall.h>
 #include <test.h>
-
+#include <file.h>
 /*
  * Load program "progname" and start running it in usermode.
  * Does not return except on error.
@@ -73,6 +73,8 @@ runprogram(char *progname)
 		vfs_close(v);
 		return ENOMEM;
 	}
+
+	filetable_init();
 
 	/* Activate it. */
 	as_activate(curthread->t_addrspace);

@@ -66,6 +66,8 @@ file_open(char *filename, int flags, int mode, int *retfd)
 
 	//kprintf("FILE_OPEN@@@@@@@@@@@@@@@@@@ 67\n");
 	if(fileLocation == -1){
+
+		
 		lock_destroy(fte->f_lock);
 		kfree(fte);
 		vfs_close(retVnode);
@@ -172,7 +174,7 @@ filetable_init(void)
 	}
 
 	strcpy(cons, "con:");
-	result = file_open(cons, O_RDONLY, 0664, retval);
+	result = file_open(cons, O_RDONLY, 0, retval);
 
 	if(result){
 		return result;
@@ -180,7 +182,16 @@ filetable_init(void)
 
 	strcpy(cons, "con:");
 
-	result = file_open(cons, O_WRONLY, 0664, retval);
+	result = file_open(cons, O_WRONLY, 0, retval);
+
+
+	if(result){
+		return result;
+	}
+
+	strcpy(cons, "con:");
+
+	result = file_open(cons, O_WRONLY, 0, retval);
 
 
 	if(result){
