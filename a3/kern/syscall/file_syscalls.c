@@ -294,19 +294,22 @@ sys_write(int fd, userptr_t buf, size_t len, int *retval)
 int
 sys_lseek(int fd, off_t offset, int whence, off_t *retval)
 {
-	
+	// get current filetable in current thread
 	struct filetable *ft = curthread->t_filetable;
 
-
+	// check fd is valid
 	if (fd < 0 || fd >=__OPEN_MAX){
 	  	return EBADF;
 	}
-
+	// get current file entry
 	struct ft_entry *fe = ft->file_entry[fd];
 	if(fe == NULL || fe->f_vnode == NULL)
 		return EBADF;
+	// get the lock
 	lock_acquire(fe->f_lock);
 
+
+	// get th position left before 
     int position;
     if(whence == SEEK_SET){
     	position = (int)offset;
@@ -320,16 +323,18 @@ sys_lseek(int fd, off_t offset, int whence, off_t *retval)
      	position = (int)ft_stat.st_size - (int)offset;
 
   	}else{
+  		// release lock when whence not valid
+  		// return errorCode
   		lock_release(fe->f_lock);
   		return EINVAL;
   	}
 
-
+  	// position cannot be negative
   	if (position < 0){
     	lock_release(fe->f_lock);
     	return EINVAL;
   	}
-
+  	// try to seek
 	int result = VOP_TRYSEEK(fe->f_vnode, position);
 
   	if (result != 0){

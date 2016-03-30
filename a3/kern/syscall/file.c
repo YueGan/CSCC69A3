@@ -261,29 +261,28 @@ int file_dup(int oldfd, int newfd, int *retval){
 		return 0;
 	}
 	
-	struct file_entry *newFe = curthread->t_filetable->file_entry[newfd];
-	struct file_entry *oldFe = curthread->t_filetable->file_entry[oldfd];
+	struct filetable cur_ft = curthread->t_filetable;
 
 	// There are nothing to duplicate!
-	if(oldFe == NULL){
+	if(cur_ft->file_entry[oldfd] == NULL){
 		return EBADF;
 	}
 
 	// Close the file entry of new if its not empty to use
-	if(newFe != NULL){
+	if(cur_ft->file_entry[newfd] != NULL){
 		file_close(newfd);
 	}
 
 	// acquire the lock
-	lock_acquire(oldFe->f_lock);
+	lock_acquire(cur_ft->file_entry[oldfd]->f_lock);
 	// Perform duplication
 	
 
-	newFe = oldFe;
-	oldFe->numopen++;
+	cur_ft->file_entry[newfd] = cur_ft->file_entry[oldfd];
+	cur_ft->file_entry[oldfd]->numopen++;
 
 	// release the lock
-	lock_release(oldFe->f_lock);
+	lock_release(cur_ft->file_entry[oldfd]->f_lock);
 
 	// Upon completion, set the return value to newfd
 	*retval = newfd;
