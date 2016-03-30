@@ -162,7 +162,8 @@ sys_read(int fd, userptr_t buf, size_t size, int *retval)
 	struct uio user_uio;
 	struct iovec user_iov;
 	int result;
-	struct ft_entry *cur_fte = curthread->t_filetable->file_entry[fd];
+	struct filetable *ft = curthread->t_filetable;
+
 	//int offset = 0; Replaced 
 
 	/* Make sure we were able to init the cons_vnode */
@@ -170,7 +171,10 @@ sys_read(int fd, userptr_t buf, size_t size, int *retval)
 	if (cons_vnode == NULL) {
 	  return ENODEV;
 	}
+
 	*/
+	if (buf == NULL)
+		return EFAULT;
 	/* better be a valid file descriptor */
 	/* Right now, only stdin (0), stdout (1) and stderr (2)
 	 * are supported, and they can't be redirected to a file
@@ -178,6 +182,8 @@ sys_read(int fd, userptr_t buf, size_t size, int *retval)
 	if (fd < 0 || fd > __OPEN_MAX -1) {
 	  return EBADF;
 	}
+
+	struct ft_entry *cur_fte = ft->file_entry[fd];
 
 	if (cur_fte == NULL){
 		return EBADF;
@@ -233,7 +239,8 @@ sys_write(int fd, userptr_t buf, size_t len, int *retval)
         struct uio user_uio;
         struct iovec user_iov;
         int result;
-        struct ft_entry *cur_fte = curthread->t_filetable->file_entry[fd];
+        struct filetable *ft = curthread->t_filetable;
+        
         //int offset = 0;
 
         /* Make sure we were able to init the cons_vnode 
@@ -241,13 +248,16 @@ sys_write(int fd, userptr_t buf, size_t len, int *retval)
           return ENODEV;
         }
         */
-
+        if (buf == NULL)
+        	return EFAULT;
         /* Right now, only stdin (0), stdout (1) and stderr (2)
          * are supported, and they can't be redirected to a file
          */
         if (fd < 0 || fd > __OPEN_MAX -1) {
           return EBADF;
         }
+
+        struct ft_entry *cur_fte = ft->file_entry[fd];
 
         if (cur_fte == NULL){
         	return EBADF;
@@ -286,14 +296,16 @@ sys_lseek(int fd, off_t offset, int whence, off_t *retval)
 {
 	
 	struct filetable *ft = curthread->t_filetable;
-	struct ft_entry *fe = ft->file_entry[fd];
-	lock_acquire(fe->f_lock);
 
-	if (fd < 0 || fd >=__OPEN_MAX ||ft->file_entry[fd] == NULL ||
-			ft->file_entry[fd]->f_vnode == NULL){
-		lock_release(fe->f_lock);
+
+	if (fd < 0 || fd >=__OPEN_MAX){
 	  	return EBADF;
 	}
+
+	struct ft_entry *fe = ft->file_entry[fd];
+	if(fe == NULL || fe->f_vnode == NULL)
+		return EBADF;
+	lock_acquire(fe->f_lock);
 
     int position;
     if(whence == SEEK_SET){
@@ -373,6 +385,9 @@ sys___getcwd(userptr_t buf, size_t buflen, int *retval)
 	int result;
 	struct iovec iov;
 	struct uio ku;
+
+	if(buf == NULL)
+		return EFAULT;
 
 	if((path = (char*)kmalloc(buflen)) == NULL){
 		return ENOMEM;
