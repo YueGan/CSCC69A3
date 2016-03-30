@@ -157,9 +157,10 @@ filetable_init(void)
 {
 
 	//kprintf("FILE_INIT @@@@@@@@@@@@@@@@@@\n");
+	char args[4];
 	int result;
 	int *retval;
-	char args[4];
+	
 
 	curthread->t_filetable = kmalloc(sizeof(struct filetable));
 
@@ -170,8 +171,10 @@ filetable_init(void)
 	}
 
 	// Initialize the file entry
-	for (int n = 0; n < __OPEN_MAX; n++){
+	int n = 0;
+	while(n < __OPEN_MAX){
 		curthread->t_filetable->file_entry[n] = NULL;
+		n++;
 	}
 
 	// Initialize the first three arguments
@@ -214,10 +217,12 @@ filetable_destroy(struct filetable *ft)
 {
 
 	// Close all file table
-    for(int n = 0; n < __OPEN_MAX; n++){
+	int n = 0;
+	while(n < __OPEN_MAX){
         if(ft->file_entry[n] != NULL){
         	file_close(n);
         }
+        n++;
     }
     kfree(ft);
 
@@ -233,6 +238,7 @@ filetable_destroy(struct filetable *ft)
  */
 
 int filetable_getfd(void){
+
 	for (int i = 0; i < __OPEN_MAX; i++){
 		if (curthread->t_filetable->file_entry[i] == NULL){
 			return i;
@@ -243,14 +249,11 @@ int filetable_getfd(void){
 
 int file_dup(int oldfd, int newfd, int *retval){
 	
-	struct filetable *cur_ft = curthread->t_filetable;
-
 
 	// Return error message bad fd number if the fds are out of bound
 	if (newfd < 0 || oldfd < 0 || newfd >= __OPEN_MAX || oldfd >= __OPEN_MAX){
 		return EBADF;
 	}
-
 	// If the fds are the same, there are nothing to change.
 	if(oldfd == newfd){
 		// Upon completion, set the return value to newfd
@@ -258,24 +261,29 @@ int file_dup(int oldfd, int newfd, int *retval){
 		return 0;
 	}
 	
+	struct file_entry *newFe = curthread->t_filetable->file_entry[newfd];
+	struct file_entry *oldFe = curthread->t_filetable->file_entry[oldfd];
+
 	// There are nothing to duplicate!
-	if(cur_ft->file_entry[oldfd] == NULL){
+	if(oldFe == NULL){
 		return EBADF;
 	}
 
 	// Close the file entry of new if its not empty to use
-	if(cur_ft->file_entry[newfd] != NULL){
+	if(newFe != NULL){
 		file_close(newfd);
 	}
 
 	// acquire the lock
-	lock_acquire(cur_ft->file_entry[oldfd]->f_lock);
+	lock_acquire(oldFe->f_lock);
 	// Perform duplication
-	cur_ft->file_entry[newfd] = cur_ft->file_entry[oldfd];
-	cur_ft->file_entry[oldfd]->numopen++;
+	
+
+	newFe = oldFe;
+	oldFe->numopen++;
 
 	// release the lock
-	lock_release(cur_ft->file_entry[oldfd]->f_lock);
+	lock_release(oldFe->f_lock);
 
 	// Upon completion, set the return value to newfd
 	*retval = newfd;

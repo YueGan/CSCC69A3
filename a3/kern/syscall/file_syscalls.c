@@ -310,9 +310,11 @@ sys_lseek(int fd, off_t offset, int whence, off_t *retval)
     int position;
     if(whence == SEEK_SET){
     	position = (int)offset;
-  	}else if(whence == SEEK_CUR){
+  	}
+  	else if(whence == SEEK_CUR){
     	position = (int)fe->offset + (int)offset;
-  	}else if(whence == SEEK_END){
+  	}
+  	else if(whence == SEEK_END){
   		struct stat ft_stat;
   		VOP_STAT(fe->f_vnode, &ft_stat);
      	position = (int)ft_stat.st_size - (int)offset;
@@ -380,26 +382,34 @@ int
 sys___getcwd(userptr_t buf, size_t buflen, int *retval)
 {
 
-
 	char *path;
 	int result;
-	struct iovec iov;
-	struct uio ku;
+	struct iovec cur_iovec;
+	struct uio kernel_uio;
 
+	// If buffer is invalid, return invalid error
 	if(buf == NULL)
 		return EFAULT;
 
+
+	// If malloc size failed, then return not enough memory
 	if((path = (char*)kmalloc(buflen)) == NULL){
 		return ENOMEM;
 	}
 
-	uio_kinit(&iov, &ku, path, buflen, 0, UIO_READ);
-	result = vfs_getcwd(&ku);
+	// perform initialization
+	uio_kinit(&cur_iovec, &kernel_uio, path, buflen, 0, UIO_READ);
+	// Use the vfs get cwd
+	result = vfs_getcwd(&kernel_uio);
+
+	// Return the path if success
 	if (result){
 		kfree(path);
 		
 		return result;
 	}
+
+	// Copy out the path into output
 	*retval = buflen;
 	result = copyout(path, buf, buflen);
 
@@ -411,25 +421,6 @@ sys___getcwd(userptr_t buf, size_t buflen, int *retval)
 	kfree(path);
 	
 	return 0;
-	
-
-
-
-
-	/*
-	// change from getting address to passing pointers
-    struct uio *user_uio;
-	struct iovec *user_iov;
-	int result;
-	*/
-	/* set up a uio with the buffer, its size, and the current offset */
-
-	/*
-	mk_useruio(user_iov, user_uio, buf, buflen, 0, UIO_READ);
-	result = vfs_getcwd(user_uio);
-	*retval = result;
-	return result;
-*/
 	
 }
 
