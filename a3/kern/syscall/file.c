@@ -261,7 +261,7 @@ int file_dup(int oldfd, int newfd, int *retval){
 		return 0;
 	}
 	
-	struct filetable cur_ft = curthread->t_filetable;
+	struct filetable *cur_ft = curthread->t_filetable;
 
 	// There are nothing to duplicate!
 	if(cur_ft->file_entry[oldfd] == NULL){
