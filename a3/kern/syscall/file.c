@@ -9,17 +9,18 @@
 #include <kern/limits.h>
 #include <kern/stat.h>
 #include <kern/unistd.h>
-#include <file.h>
-#include <syscall.h>
-#include <vnode.h>
-#include <lib.h>
-#include <kern/fcntl.h>
-#include <thread.h>
-#include <vfs.h>
-#include <current.h>
-#include <synch.h>
 #include <kern/seek.h> 
-#include <uio.h> 
+#include <kern/fcntl.h>
+#include <lib.h>
+#include <uio.h>
+#include <vfs.h>
+#include <file.h>
+#include <synch.h>
+#include <vnode.h>
+#include <thread.h>
+#include <syscall.h>
+#include <current.h>
+
 
 /*** openfile functions ***/
 
@@ -36,7 +37,7 @@ int
 file_open(char *filename, int flags, int mode, int *retfd)
 {
 
-	//kprintf("FILE_OPEN@@@@@@@@@@@@@@@@@@\n");
+	
 	int fileLocation;
 	struct vnode *retVnode;
 	struct stat *vnodeStat;
@@ -44,10 +45,11 @@ file_open(char *filename, int flags, int mode, int *retfd)
 
 	fte = kmalloc(sizeof(struct ft_entry));
 	if(fte  == NULL){
+		kfree(fte);
 		return ENOMEM;
 	}
 	
-	//kprintf("FILE_OPEN@@@@@@@@@@@@@@@@@@ 50\n");
+	
 	int result = vfs_open(filename, flags, mode, &retVnode);
 
 	if(result){
@@ -55,32 +57,31 @@ file_open(char *filename, int flags, int mode, int *retfd)
 		return result;
 	}
 
-	//kprintf("FILE_OPEN@@@@@@@@@@@@@@@@@@ 58\n");
-	fte->f_name = filename;
-	fte->offset = 0;
+	// store the page information
 	fte->f_flags = flags;
 	fte->f_vnode = retVnode;
+	fte->f_name = filename;
+	fte->offset = 0;
 	fte->numopen = 1;
-	fte->f_lock = lock_create("File lock");
+	fte->f_lock = lock_create("file lock");
 	fileLocation = filetable_getfd();
 
-	//kprintf("FILE_OPEN@@@@@@@@@@@@@@@@@@ 67\n");
-	if(fileLocation == -1){
+	// If error occurs, free nessacery
+	if(fileLocation < 0){
 
-		
 		lock_destroy(fte->f_lock);
 		kfree(fte);
 		vfs_close(retVnode);
 		return EMFILE;
 	}
 
-	//kprintf("FILE_OPEN@@@@@@@@@@@@@@@@@@ 75\n");
+	
 	if((flags & O_ACCMODE) == O_APPEND){
 		VOP_STAT(fte->f_vnode, vnodeStat);
 		fte->offset = vnodeStat->st_size;
 	}
 
-	//kprintf("FILE_OPEN@@@@@@@@@@@@@@@@@@ 81\n");
+	// Put the page into page table entry
 	curthread->t_filetable->file_entry[fileLocation] = fte;
 	*retfd = fileLocation;
 	return 0;
@@ -96,7 +97,7 @@ file_open(char *filename, int flags, int mode, int *retfd)
 int
 file_close(int fd)
 {
-	//kprintf("FILE_CLOSE@@@@@@@@@@@@@@@@@@\n");
+	
 	// If the file descripter given is error or greater than number of open_max
 	// return bad file number
 	if (fd < 0 || fd >= __OPEN_MAX){
@@ -114,8 +115,8 @@ file_close(int fd)
 	// Aquire the page lock
 	lock_acquire(fte->f_lock);
 	// Decrement the number of opened file, and set current file entry to Null
+	curthread->t_filetable->file_entry[fd] = NULL;
 	fte->numopen--;
-	curthread->t_filetable->file_entry[fd] = NULL;	
 
 	// If the file number opened is 0 then free what ever is required
 	// And destroy the lock so that next file table entry can aquire the lock
@@ -158,7 +159,7 @@ filetable_init(void)
 	//kprintf("FILE_INIT @@@@@@@@@@@@@@@@@@\n");
 	int result;
 	int *retval;
-	char cons[4];
+	char args[4];
 
 	curthread->t_filetable = kmalloc(sizeof(struct filetable));
 
@@ -169,29 +170,30 @@ filetable_init(void)
 	}
 
 	// Initialize the file entry
-	for (int i = 0; i < __OPEN_MAX; i++){
-		curthread->t_filetable->file_entry[i] = NULL;
+	for (int n = 0; n < __OPEN_MAX; n++){
+		curthread->t_filetable->file_entry[n] = NULL;
 	}
 
-	strcpy(cons, "con:");
-	result = file_open(cons, O_RDONLY, 0, retval);
+	// Initialize the first three arguments
+	strcpy(args, "con:");
+	result = file_open(args, O_RDONLY, 0, retval);
 
 	if(result){
 		return result;
 	}
 
-	strcpy(cons, "con:");
+	strcpy(args, "con:");
 
-	result = file_open(cons, O_WRONLY, 0, retval);
+	result = file_open(args, O_WRONLY, 0, retval);
 
 
 	if(result){
 		return result;
 	}
 
-	strcpy(cons, "con:");
+	strcpy(args, "con:");
 
-	result = file_open(cons, O_WRONLY, 0, retval);
+	result = file_open(args, O_WRONLY, 0, retval);
 
 
 	if(result){
@@ -211,13 +213,14 @@ void
 filetable_destroy(struct filetable *ft)
 {
 
-	//kprintf("FILE_DESTROY @@@@@@@@@@@@@@@@@@\n");
-        for(int i = 0; i < __OPEN_MAX; i++){
-        	if(ft->file_entry[i] != NULL){
-        		file_close(i);
-        	}
+	// Close all file table
+    for(int n = 0; n < __OPEN_MAX; n++){
+        if(ft->file_entry[n] != NULL){
+        	file_close(n);
         }
-        kfree(ft);
+    }
+    kfree(ft);
+
 }	
 
 
@@ -240,7 +243,7 @@ int filetable_getfd(void){
 
 int file_dup(int oldfd, int newfd, int *retval){
 	
-	struct filetable *file_table = curthread->t_filetable;
+	struct filetable *cur_ft = curthread->t_filetable;
 
 
 	// Return error message bad fd number if the fds are out of bound
@@ -256,20 +259,23 @@ int file_dup(int oldfd, int newfd, int *retval){
 	}
 	
 	// There are nothing to duplicate!
-	if(file_table->file_entry[oldfd] == NULL){
+	if(cur_ft->file_entry[oldfd] == NULL){
 		return EBADF;
 	}
 
 	// Close the file entry of new if its not empty to use
-	if(file_table->file_entry[newfd] != NULL){
+	if(cur_ft->file_entry[newfd] != NULL){
 		file_close(newfd);
 	}
 
-	lock_acquire(file_table->file_entry[oldfd]->f_lock);
-	file_table->file_entry[oldfd]->numopen++;
+	// acquire the lock
+	lock_acquire(cur_ft->file_entry[oldfd]->f_lock);
 	// Perform duplication
-	file_table->file_entry[newfd] = file_table->file_entry[oldfd];
-	lock_release(file_table->file_entry[oldfd]->f_lock);
+	cur_ft->file_entry[newfd] = cur_ft->file_entry[oldfd];
+	cur_ft->file_entry[oldfd]->numopen++;
+
+	// release the lock
+	lock_release(cur_ft->file_entry[oldfd]->f_lock);
 
 	// Upon completion, set the return value to newfd
 	*retval = newfd;

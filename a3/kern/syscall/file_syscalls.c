@@ -158,11 +158,12 @@ int
 sys_read(int fd, userptr_t buf, size_t size, int *retval)
 {
 
-	//kprintf("SYS_READ@@@@@@@@@@@@@@@@@@@@@2\n");
+	
 	struct uio user_uio;
 	struct iovec user_iov;
 	int result;
-	//int offset = 0;
+	struct ft_entry *cur_fte = curthread->t_filetable->file_entry[fd];
+	//int offset = 0; Replaced 
 
 	/* Make sure we were able to init the cons_vnode */
 	/*
@@ -178,25 +179,25 @@ sys_read(int fd, userptr_t buf, size_t size, int *retval)
 	  return EBADF;
 	}
 
-	if (curthread->t_filetable->file_entry[fd] == NULL){
+	if (cur_fte == NULL){
 		return EBADF;
 	}
 
 	// aquire the lock for this page entry
-	lock_acquire(curthread->t_filetable->file_entry[fd]->f_lock);
+	lock_acquire(cur_fte->f_lock);
 	/* set up a uio with the buffer, its size, and the current offset */
-	mk_useruio(&user_iov, &user_uio, buf, size, curthread->t_filetable->file_entry[fd]->offset, UIO_READ);
+	mk_useruio(&user_iov, &user_uio, buf, size, cur_fte->offset, UIO_READ);
 
 
 	/* does the read */
-	result = VOP_READ(curthread->t_filetable->file_entry[fd]->f_vnode, &user_uio);
+	result = VOP_READ(cur_fte->f_vnode, &user_uio);
 	if (result) {
-		lock_release(curthread->t_filetable->file_entry[fd]->f_lock);
+		lock_release(cur_fte->f_lock);
 		return result;
 	}
 	// Change the default offset to file table entry offset
-	curthread->t_filetable->file_entry[fd]->offset = user_uio.uio_offset;
-	lock_release(curthread->t_filetable->file_entry[fd]->f_lock);
+	cur_fte->offset = user_uio.uio_offset;
+	lock_release(cur_fte->f_lock);
 
 	/*
 	 * The amount read is the size of the buffer originally, minus
@@ -232,6 +233,7 @@ sys_write(int fd, userptr_t buf, size_t len, int *retval)
         struct uio user_uio;
         struct iovec user_iov;
         int result;
+        struct ft_entry *cur_fte = curthread->t_filetable->file_entry[fd];
         //int offset = 0;
 
         /* Make sure we were able to init the cons_vnode 
@@ -243,29 +245,29 @@ sys_write(int fd, userptr_t buf, size_t len, int *retval)
         /* Right now, only stdin (0), stdout (1) and stderr (2)
          * are supported, and they can't be redirected to a file
          */
-        if (fd < 0 || fd > 2) {
+        if (fd < 0 || fd > __OPEN_MAX -1) {
           return EBADF;
         }
 
-        if (curthread->t_filetable->file_entry[fd] == NULL){
+        if (cur_fte == NULL){
         	return EBADF;
         }
 
 
-        lock_acquire(curthread->t_filetable->file_entry[fd]->f_lock);
+        lock_acquire(cur_fte->f_lock);
         /* set up a uio with the buffer, its size, and the current offset */
-        mk_useruio(&user_iov, &user_uio, buf, len, curthread->t_filetable->file_entry[fd]->offset, UIO_WRITE);
+        mk_useruio(&user_iov, &user_uio, buf, len, cur_fte->offset, UIO_WRITE);
 
         /* does the write */
-        result = VOP_WRITE(curthread->t_filetable->file_entry[fd]->f_vnode, &user_uio);
+        result = VOP_WRITE(cur_fte->f_vnode, &user_uio);
         if (result) {
-        	lock_release(curthread->t_filetable->file_entry[fd]->f_lock);
+        	lock_release(cur_fte->f_lock);
             return result;
         }
 
         // Change the default offset to file table entry offset
-        curthread->t_filetable->file_entry[fd]->offset = user_uio.uio_offset;
-        lock_release(curthread->t_filetable->file_entry[fd]->f_lock);
+        cur_fte->offset = user_uio.uio_offset;
+        lock_release(cur_fte->f_lock);
         /*
          * the amount written is the size of the buffer originally,
          * minus how much is left in it.
@@ -365,15 +367,47 @@ sys_chdir(userptr_t path)
 int
 sys___getcwd(userptr_t buf, size_t buflen, int *retval)
 {
+	
+	char *path;
+	int result;
+	struct iovec iov;
+	struct uio ku;
+
+	if((path = (char*)kmalloc(buflen)) == NULL){
+		return ENOMEM;
+	}
+
+	uio_kinit(&iov, &ku, path, buflen, 0, UIO_READ);
+	result = vfs_getcwd(&ku);
+	if (result){
+		kfree(path);
+		return result;
+	}
+	result = copyout(path, buf, buflen);
+
+	if (result){
+		kfree(path);
+		return result;
+	}
+	kfree(path);
+	*retval = buflen;
+	return 0;
+
+	/*
 	// change from getting address to passing pointers
     struct uio *user_uio;
 	struct iovec *user_iov;
 	int result;
+	*/
 	/* set up a uio with the buffer, its size, and the current offset */
+
+	/*
 	mk_useruio(user_iov, user_uio, buf, buflen, 0, UIO_READ);
 	result = vfs_getcwd(user_uio);
 	*retval = result;
 	return result;
+*/
+	
 }
 
 /*
