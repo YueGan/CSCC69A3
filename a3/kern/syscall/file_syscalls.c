@@ -367,7 +367,8 @@ sys_chdir(userptr_t path)
 int
 sys___getcwd(userptr_t buf, size_t buflen, int *retval)
 {
-	
+
+
 	char *path;
 	int result;
 	struct iovec iov;
@@ -381,17 +382,24 @@ sys___getcwd(userptr_t buf, size_t buflen, int *retval)
 	result = vfs_getcwd(&ku);
 	if (result){
 		kfree(path);
+		
 		return result;
 	}
+	*retval = buflen;
 	result = copyout(path, buf, buflen);
 
 	if (result){
-		kfree(path);
+		//kfree(path);
+		
 		return result;
 	}
 	kfree(path);
-	*retval = buflen;
+	
 	return 0;
+	
+
+
+
 
 	/*
 	// change from getting address to passing pointers
