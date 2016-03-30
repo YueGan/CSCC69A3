@@ -568,6 +568,34 @@ thread_fork(const char *name,
 		newthread->t_cwd = curthread->t_cwd;
 	}
 
+	struct filetable *ct = curthread->t_filetable;
+	struct filetable *nt = newthread->t_filetable;
+	//filetable copy to child process if thread has table
+	if (ct != NULL){
+		//if new thread has no filetable, malloc
+		if (nt == NULL){
+			nt = kmalloc(sizeof(struct filetable));
+			if (nt == NULL)
+				return ENOMEM;
+		}
+
+		//newthread now has filetable, copy curthread table into it
+		for (int fd = 0; fd < __OPEN_MAX; fd++){
+			//if current entry exists, copy and increase number of open files
+			if (ct->file_entry[fd] != NULL){
+				nt->file_entry[fd] = ct->file_entry[fd];
+				ct->file_entry[fd]->numopen++;
+			}
+			//if empty, new table empty
+			else
+				nt->file_entry[fd] = NULL;
+		}
+
+
+	}
+	else
+		nt = NULL;
+
 	/*
 	 * Because new threads come out holding the cpu runqueue lock
 	 * (see notes at bottom of thread_switch), we need to account
