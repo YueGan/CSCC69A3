@@ -425,31 +425,47 @@ sys___getcwd(userptr_t buf, size_t buflen, int *retval)
 int
 sys_fstat(int fd, userptr_t statptr)
 {
-	//stat structure, uio for userspace movement and its iovec. result for errors
-	//filetable and filetable entry to look up files
+//////stat structure, uio for userspace movement and its iovec. result for errors
+//////filetable and filetable entry to look up files
+	//kprintf("fstat start\n");
 	int result;
 	struct stat stats;
 	struct uio u;
 	struct iovec iov;
+	//kprintf("fstat filetable\n");
 	struct filetable *ft = curthread->t_filetable;
-	struct ft_entry *fe = ft->file_entry[fd];
 
-	//EBADF if fd is invalid. Check if in range and not null and has vnode
-	if (fd < 0 || fd >= __OPEN_MAX || fe == NULL || fe->f_vnode == NULL)
+//////EFAULT if no filetable
+	if (ft == NULL)
+		return EFAULT;
+	//kprintf("fstat var init pass\n");
+
+//////EBADF if fd is invalid. Check if in range and not null and has vnode
+	if (fd < 0 || fd >= __OPEN_MAX)
 		return EBADF;
 
-	//EFAULT if statptr isn't a valid address
+	//kprintf("fstat ft entry\n");
+	struct ft_entry *fe = ft->file_entry[fd];
+	//kprintf("fstat check fe validity\n");
+	if (fe == NULL || fe->f_vnode == NULL)
+		return EBADF;
+	//kprintf("fstat fe valid\n");
+
+//////EFAULT if statptr isn't a valid address
 	if (statptr == NULL)
 		return EFAULT;
+//	kprintf("fstat no EFAULT\n");
 
 	//parameters valid, grab stats
 	result = VOP_STAT(fe->f_vnode, &stats);
 	if (result) 
 		return result;
+	//kprintf("fstat VOP_STAT pass\n");
 
-	//setup userspace movement and move to statptr
+//////setup userspace movement and move to statptr
 	mk_useruio(&iov, &u, statptr, sizeof(stats), 0 , UIO_READ);
 	result = uiomove(&stats, sizeof(stats), &u);
+	//kprintf("fstat uiomoved\n");
 	return result;
 }
 
@@ -467,9 +483,15 @@ sys_getdirentry(int fd, userptr_t buf, size_t buflen, int *retval)
 	struct uio u;
 	struct iovec iov;
 	struct filetable *ft = curthread->t_filetable;
-	struct ft_entry *fe = ft->file_entry[fd];
+	//fault if no filetable
+	if(ft == NULL)
+		return EFAULT;
 	//EBADF if fd invalid. check if in range and has vnode
-	if (fd < 0 || fd >= __OPEN_MAX || fe == NULL || fe->f_vnode == NULL)
+	if (fd < 0 || fd >= __OPEN_MAX)
+		return EBADF;
+
+	struct ft_entry *fe = ft->file_entry[fd];
+	if (fe == NULL || fe->f_vnode == NULL)
 		return EBADF;
 	//EFAULT if buf invalid
 	if (buf == NULL)
